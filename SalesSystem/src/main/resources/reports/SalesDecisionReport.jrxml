@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Sales Performance & Restock Decision Report: joins products, categories, sale_items, sales and customers -->
+<jasperReport xmlns="http://jasperreports.sourceforge.net/jasperreports" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://jasperreports.sourceforge.net/jasperreports http://jasperreports.sourceforge.net/xsd/jasperreport.xsd" name="SalesDecisionReport" pageWidth="842" pageHeight="595" orientation="Landscape" columnWidth="802" leftMargin="20" rightMargin="20" topMargin="20" bottomMargin="20">
+
+  <!-- style: colours the decision text red when the item must be restocked -->
+  <style name="Decision">
+    <conditionalStyle>
+      <conditionExpression><![CDATA[$F{decision}.equals("RESTOCK NOW")]]></conditionExpression>
+      <style forecolor="#C62828" isBold="true"/>
+    </conditionalStyle>
+    <conditionalStyle>
+      <conditionExpression><![CDATA[$F{decision}.startsWith("NO SALES")]]></conditionExpression>
+      <style forecolor="#EF6C00" isBold="true"/>
+    </conditionalStyle>
+  </style>
+
+  <!-- parameters supplied by the Java screen (report period) -->
+  <parameter name="FROM_DATE" class="java.sql.Timestamp"/>
+  <parameter name="TO_DATE" class="java.sql.Timestamp"/>
+
+  <!-- main query: 5 tables joined; LEFT JOIN keeps products that never sold -->
+  <queryString><![CDATA[
+SELECT c.category_name, p.product_code, p.product_name, p.stock_qty, p.reorder_level,
+       CAST(COALESCE(SUM(si.quantity),0) AS SIGNED) AS qty_sold,
+       COALESCE(SUM(si.line_total),0) AS revenue,
+       COALESCE(SUM(si.line_total - si.quantity * p.cost_price),0) AS profit,
+       COUNT(DISTINCT cu.customer_id) AS buyers,
+       CASE WHEN COALESCE(SUM(si.quantity),0) = 0 THEN 'NO SALES - REVIEW'
+            WHEN p.stock_qty <= p.reorder_level THEN 'RESTOCK NOW'
+            ELSE 'HEALTHY' END AS decision
+FROM products p
+JOIN categories c ON c.category_id = p.category_id
+LEFT JOIN (sale_items si
+           JOIN sales s ON s.sale_id = si.sale_id AND s.sale_date BETWEEN $P{FROM_DATE} AND $P{TO_DATE}
+           JOIN customers cu ON cu.customer_id = s.customer_id)
+       ON si.product_id = p.product_id
+GROUP BY c.category_name, p.product_id, p.product_code, p.product_name, p.stock_qty, p.reorder_level, p.cost_price
+ORDER BY c.category_name, revenue DESC
+  ]]></queryString>
+
+  <!-- fields returned by the query -->
+  <field name="category_name" class="java.lang.String"/>
+  <field name="product_code" class="java.lang.String"/>
+  <field name="product_name" class="java.lang.String"/>
+  <field name="stock_qty" class="java.lang.Integer"/>
+  <field name="reorder_level" class="java.lang.Integer"/>
+  <field name="qty_sold" class="java.lang.Long"/>
+  <field name="revenue" class="java.math.BigDecimal"/>
+  <field name="profit" class="java.math.BigDecimal"/>
+  <field name="buyers" class="java.lang.Long"/>
+  <field name="decision" class="java.lang.String"/>
+
+  <!-- variables: category subtotals, grand totals and the count of urgent restocks -->
+  <variable name="catRevenue" class="java.math.BigDecimal" resetType="Group" resetGroup="category" calculation="Sum"><variableExpression><![CDATA[$F{revenue}]]></variableExpression></variable>
+  <variable name="catProfit" class="java.math.BigDecimal" resetType="Group" resetGroup="category" calculation="Sum"><variableExpression><![CDATA[$F{profit}]]></variableExpression></variable>
+  <variable name="totRevenue" class="java.math.BigDecimal" calculation="Sum"><variableExpression><![CDATA[$F{revenue}]]></variableExpression></variable>
+  <variable name="totProfit" class="java.math.BigDecimal" calculation="Sum"><variableExpression><![CDATA[$F{profit}]]></variableExpression></variable>
+  <variable name="restockCount" class="java.lang.Integer" calculation="Sum"><variableExpression><![CDATA[$F{decision}.equals("RESTOCK NOW") ? 1 : 0]]></variableExpression></variable>
+  <variable name="reviewCount" class="java.lang.Integer" calculation="Sum"><variableExpression><![CDATA[$F{decision}.startsWith("NO SALES") ? 1 : 0]]></variableExpression></variable>
+
+  <!-- group: one block per category -->
+  <group name="category">
+    <groupExpression><![CDATA[$F{category_name}]]></groupExpression>
+    <groupHeader><band height="22">
+      <textField><reportElement mode="Opaque" backcolor="#E3F2FD" x="0" y="0" width="802" height="22"/><textElement verticalAlignment="Middle"><font isBold="true"/></textElement>
+        <textFieldExpression><![CDATA["  Category: " + $F{category_name}]]></textFieldExpression></textField>
+    </band></groupHeader>
+    <groupFooter><band height="22">
+      <staticText><reportElement x="0" y="0" width="440" height="20"/><textElement textAlignment="Right" verticalAlignment="Middle"><font isBold="true"/></textElement><text><![CDATA[Category total:  ]]></text></staticText>
+      <textField pattern="#,##0.00"><reportElement x="440" y="0" width="100" height="20"/><textElement textAlignment="Right" verticalAlignment="Middle"><font isBold="true"/></textElement><textFieldExpression><![CDATA[$V{catRevenue}]]></textFieldExpression></textField>
+      <textField pattern="#,##0.00"><reportElement x="540" y="0" width="100" height="20"/><textElement textAlignment="Right" verticalAlignment="Middle"><font isBold="true"/></textElement><textFieldExpression><![CDATA[$V{catProfit}]]></textFieldExpression></textField>
+    </band></groupFooter>
+  </group>
+
+  <!-- title: report name and selected period -->
+  <title><band height="60">
+    <staticText><reportElement x="0" y="0" width="802" height="30"/><textElement><font size="18" isBold="true"/></textElement><text><![CDATA[Sales Performance & Restock Decision Report]]></text></staticText>
+    <textField><reportElement x="0" y="32" width="802" height="20"/><textElement><font size="11"/></textElement>
+      <textFieldExpression><![CDATA["Period: " + new java.text.SimpleDateFormat("yyyy-MM-dd").format($P{FROM_DATE}) + " to " + new java.text.SimpleDateFormat("yyyy-MM-dd").format($P{TO_DATE})]]></textFieldExpression></textField>
+  </band></title>
+
+  <!-- column headings -->
+  <columnHeader><band height="24">
+    <staticText><reportElement mode="Opaque" backcolor="#1565C0" forecolor="#FFFFFF" x="0" y="0" width="70" height="24"/><textElement verticalAlignment="Middle"><font isBold="true"/></textElement><text><![CDATA[ Code]]></text></staticText>
+    <staticText><reportElement mode="Opaque" backcolor="#1565C0" forecolor="#FFFFFF" x="70" y="0" width="180" height="24"/><textElement verticalAlignment="Middle"><font isBold="true"/></textElement><text><![CDATA[Product]]></text></staticText>
+    <staticText><reportElement mode="Opaque" backcolor="#1565C0" forecolor="#FFFFFF" x="250" y="0" width="60" height="24"/><textElement textAlignment="Right" verticalAlignment="Middle"><font isBold="true"/></textElement><text><![CDATA[Stock]]></text></staticText>
+    <staticText><reportElement mode="Opaque" backcolor="#1565C0" forecolor="#FFFFFF" x="310" y="0" width="60" height="24"/><textElement textAlignment="Right" verticalAlignment="Middle"><font isBold="true"/></textElement><text><![CDATA[Reorder]]></text></staticText>
+    <staticText><reportElement mode="Opaque" backcolor="#1565C0" forecolor="#FFFFFF" x="370" y="0" width="70" height="24"/><textElement textAlignment="Right" verticalAlignment="Middle"><font isBold="true"/></textElement><text><![CDATA[Qty Sold]]></text></staticText>
+    <staticText><reportElement mode="Opaque" backcolor="#1565C0" forecolor="#FFFFFF" x="440" y="0" width="100" height="24"/><textElement textAlignment="Right" verticalAlignment="Middle"><font isBold="true"/></textElement><text><![CDATA[Revenue]]></text></staticText>
+    <staticText><reportElement mode="Opaque" backcolor="#1565C0" forecolor="#FFFFFF" x="540" y="0" width="100" height="24"/><textElement textAlignment="Right" verticalAlignment="Middle"><font isBold="true"/></textElement><text><![CDATA[Profit]]></text></staticText>
+    <staticText><reportElement mode="Opaque" backcolor="#1565C0" forecolor="#FFFFFF" x="640" y="0" width="60" height="24"/><textElement textAlignment="Right" verticalAlignment="Middle"><font isBold="true"/></textElement><text><![CDATA[Buyers]]></text></staticText>
+    <staticText><reportElement mode="Opaque" backcolor="#1565C0" forecolor="#FFFFFF" x="700" y="0" width="102" height="24"/><textElement textAlignment="Center" verticalAlignment="Middle"><font isBold="true"/></textElement><text><![CDATA[Decision]]></text></staticText>
+  </band></columnHeader>
+
+  <!-- detail: one line per product -->
+  <detail><band height="20">
+    <textField isBlankWhenNull="true"><reportElement x="0" y="0" width="70" height="20"/><textElement verticalAlignment="Middle"/><textFieldExpression><![CDATA[" " + $F{product_code}]]></textFieldExpression></textField>
+    <textField isBlankWhenNull="true"><reportElement x="70" y="0" width="180" height="20"/><textElement verticalAlignment="Middle"/><textFieldExpression><![CDATA[$F{product_name}]]></textFieldExpression></textField>
+    <textField pattern="#,##0"><reportElement x="250" y="0" width="60" height="20"/><textElement textAlignment="Right" verticalAlignment="Middle"/><textFieldExpression><![CDATA[$F{stock_qty}]]></textFieldExpression></textField>
+    <textField pattern="#,##0"><reportElement x="310" y="0" width="60" height="20"/><textElement textAlignment="Right" verticalAlignment="Middle"/><textFieldExpression><![CDATA[$F{reorder_level}]]></textFieldExpression></textField>
+    <textField pattern="#,##0"><reportElement x="370" y="0" width="70" height="20"/><textElement textAlignment="Right" verticalAlignment="Middle"/><textFieldExpression><![CDATA[$F{qty_sold}]]></textFieldExpression></textField>
+    <textField pattern="#,##0.00"><reportElement x="440" y="0" width="100" height="20"/><textElement textAlignment="Right" verticalAlignment="Middle"/><textFieldExpression><![CDATA[$F{revenue}]]></textFieldExpression></textField>
+    <textField pattern="#,##0.00"><reportElement x="540" y="0" width="100" height="20"/><textElement textAlignment="Right" verticalAlignment="Middle"/><textFieldExpression><![CDATA[$F{profit}]]></textFieldExpression></textField>
+    <textField pattern="#,##0"><reportElement x="640" y="0" width="60" height="20"/><textElement textAlignment="Right" verticalAlignment="Middle"/><textFieldExpression><![CDATA[$F{buyers}]]></textFieldExpression></textField>
+    <textField isBlankWhenNull="true"><reportElement style="Decision" x="700" y="0" width="102" height="20"/><textElement textAlignment="Center" verticalAlignment="Middle"/><textFieldExpression><![CDATA[$F{decision}]]></textFieldExpression></textField>
+  </band></detail>
+
+  <!-- page footer: page number -->
+  <pageFooter><band height="20">
+    <textField><reportElement x="0" y="0" width="802" height="18"/><textElement textAlignment="Right"><font size="9"/></textElement><textFieldExpression><![CDATA["Page " + $V{PAGE_NUMBER}]]></textFieldExpression></textField>
+  </band></pageFooter>
+
+  <!-- summary: grand totals and the management decision summary -->
+  <summary><band height="70">
+    <staticText><reportElement x="0" y="8" width="440" height="20"/><textElement textAlignment="Right" verticalAlignment="Middle"><font size="12" isBold="true"/></textElement><text><![CDATA[GRAND TOTAL:  ]]></text></staticText>
+    <textField pattern="#,##0.00"><reportElement x="440" y="8" width="100" height="20"/><textElement textAlignment="Right" verticalAlignment="Middle"><font size="12" isBold="true"/></textElement><textFieldExpression><![CDATA[$V{totRevenue}]]></textFieldExpression></textField>
+    <textField pattern="#,##0.00"><reportElement x="540" y="8" width="100" height="20"/><textElement textAlignment="Right" verticalAlignment="Middle"><font size="12" isBold="true"/></textElement><textFieldExpression><![CDATA[$V{totProfit}]]></textFieldExpression></textField>
+    <textField><reportElement mode="Opaque" backcolor="#FFF3E0" x="0" y="38" width="802" height="26"/><textElement verticalAlignment="Middle"><font size="11" isBold="true"/></textElement>
+      <textFieldExpression><![CDATA["  DECISION SUMMARY:  " + $V{restockCount} + " product(s) must be restocked now  |  " + $V{reviewCount} + " product(s) had no sales in this period (review or promote)."]]></textFieldExpression></textField>
+  </band></summary>
+</jasperReport>

@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Maven project file: NetBeans opens this directly (File > Open Project) -->
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.sales</groupId>
+  <artifactId>sales-system</artifactId>
+  <version>1.0</version>
+  <packaging>jar</packaging>
+
+  <!-- Java 11 or newer (JDK required, because Jasper compiles the report at run time) -->
+  <properties>
+    <maven.compiler.source>11</maven.compiler.source>
+    <maven.compiler.target>11</maven.compiler.target>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+  </properties>
+
+  <dependencies>
+    <!-- MySQL JDBC driver -->
+    <dependency><groupId>com.mysql</groupId><artifactId>mysql-connector-j</artifactId><version>8.0.33</version></dependency>
+    <!-- JasperReports engine + viewer + PDF export -->
+    <dependency><groupId>net.sf.jasperreports</groupId><artifactId>jasperreports</artifactId><version>6.20.0</version></dependency>
+    <!-- Eclipse compiler used by Jasper to compile the .jrxml template -->
+    <dependency><groupId>org.eclipse.jdt</groupId><artifactId>ecj</artifactId><version>3.26.0</version></dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <!-- makes the jar runnable: sets Main-Class and points to the lib folder -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId><artifactId>maven-jar-plugin</artifactId><version>3.3.0</version>
+        <configuration><archive><manifest>
+          <mainClass>com.sales.Main</mainClass><addClasspath>true</addClasspath><classpathPrefix>lib/</classpathPrefix>
+        </manifest></archive></configuration>
+      </plugin>
+      <!-- copies every dependency jar into target/lib during "package" -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId><artifactId>maven-dependency-plugin</artifactId><version>3.6.0</version>
+        <executions><execution><id>copy-libs</id><phase>package</phase><goals><goal>copy-dependencies</goal></goals>
+          <configuration><outputDirectory>${project.build.directory}/lib</outputDirectory></configuration>
+        </execution></executions>
+      </plugin>
+    </plugins>
+  </build>
+</project>
