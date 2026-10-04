@@ -60,7 +60,7 @@ CREATE TABLE sale_items ( -- table 6: invoice lines
     FOREIGN KEY (product_id) REFERENCES products(product_id) -- product must exist
 ); 
 
--- ---------------- sample data adding ---------------- 
+------------------ sample data adding ---------------- 
 INSERT INTO users (username, password_hash, role) VALUES -- two demo users
  ('admin', SHA2('admin123',256), 'ADMIN'), -- admin / admin123
  ('cashier1', SHA2('cashier123',256), 'CASHIER'); -- cashier1 / cashier123
